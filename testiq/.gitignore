@@ -1,0 +1,21 @@
+# Antigravity agent files
+.antigravity/
+
+# User config
+testiq.config.toml
+.testiq/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
