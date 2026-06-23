@@ -26,6 +26,7 @@ class FunctionChunk:
     line_end: int = 0
     language: str = ""
     filepath: str = ""
+    class_name: str | None = None
 
 
 class BaseParser(ABC):

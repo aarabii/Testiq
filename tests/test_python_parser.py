@@ -190,6 +190,20 @@ class TestPythonParser:
 
         assert "multiply" in names
 
+    def test_parse_file_extracts_class_name(self, sample_file: Path):
+        from src.parser.languages.python_parser import PythonParser
+
+        parser = PythonParser()
+        chunks = parser.parse_file(str(sample_file))
+
+        # hello is a top-level function, class_name should be None
+        hello_chunk = next(c for c in chunks if c.name == "hello")
+        assert hello_chunk.class_name is None
+
+        # multiply is a method of Calculator, class_name should be "Calculator"
+        multiply_chunk = next(c for c in chunks if c.name == "multiply")
+        assert multiply_chunk.class_name == "Calculator"
+
     def test_function_chunk_fields(self, sample_file: Path):
         from src.parser.languages.python_parser import PythonParser
 

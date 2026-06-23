@@ -66,8 +66,19 @@ class PythonParser(BaseParser):
         source_lines: list[str],
         filepath: str,
         out: list[FunctionChunk],
+        current_class: str | None = None,
     ) -> None:
         """Recursively walk the AST and collect function/method definitions."""
+        if node.type == "class_definition":
+            class_name = None
+            for child in node.children:
+                if child.type == "identifier":
+                    class_name = child.text.decode()
+                    break
+            for child in node.children:
+                self._walk(child, source_lines, filepath, out, class_name)
+            return
+
         if node.type in ("function_definition", "decorated_definition"):
             func_node = node
             # For decorated definitions, dig into the actual function
@@ -80,20 +91,21 @@ class PythonParser(BaseParser):
                     # No function_definition child — skip
                     return
 
-            chunk = self._extract_function(func_node, source_lines, filepath)
+            chunk = self._extract_function(func_node, source_lines, filepath, current_class)
             if chunk is not None:
                 out.append(chunk)
             # Don't recurse inside functions — nested funcs are skipped
             return
 
         for child in node.children:
-            self._walk(child, source_lines, filepath, out)
+            self._walk(child, source_lines, filepath, out, current_class)
 
     def _extract_function(
         self,
         node,
         source_lines: list[str],
         filepath: str,
+        class_name: str | None = None,
     ) -> FunctionChunk | None:
         """Extract a FunctionChunk from a function_definition node."""
         name = ""
@@ -138,6 +150,7 @@ class PythonParser(BaseParser):
             line_end=line_end,
             language="python",
             filepath=filepath,
+            class_name=class_name,
         )
 
     @staticmethod
