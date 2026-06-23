@@ -15,7 +15,14 @@ from langchain_ollama import ChatOllama
 
 from src.config import TestIQConfig, load_config
 from src.parser.base_parser import FunctionChunk
-from src.prompts.templates import SELF_CORRECTION_PROMPT, TEST_GENERATION_PROMPT
+from src.prompts.templates import (
+    SELF_CORRECTION_PROMPT,
+    TEST_GENERATION_PROMPT,
+    CLASS_GENERATION_PROMPT,
+    CLASS_SELF_CORRECTION_PROMPT,
+    FUNCTIONS_GENERATION_PROMPT,
+    FUNCTIONS_SELF_CORRECTION_PROMPT,
+)
 from src.rag.retriever import RetrievalResult
 from src.validator.test_validator import ValidationResult, validate_test_code
 
@@ -155,6 +162,176 @@ def generate_tests(
             return result
 
     # Max retries exhausted — return last attempt
+    result.code = code
+    result.is_valid = False
+    result.issues = validation.issues
+    return result
+
+
+def generate_class_tests(
+    class_name: str,
+    chunks: list[FunctionChunk],
+    context_chunks: list[RetrievalResult] | None = None,
+    config: TestIQConfig | None = None,
+    *,
+    llm_fn: Callable[[str], str] | None = None,
+) -> GenerationResult:
+    """
+    Generate test code for all methods in a class using LLM + self-correction.
+    """
+    if not chunks:
+        return GenerationResult()
+
+    cfg = config or load_config()
+    call_llm = llm_fn or _default_llm_fn(cfg)
+    language = chunks[0].language or cfg.parser.language
+    test_framework = cfg.get_test_framework(language)
+    max_retries = cfg.generation.max_retries
+
+    context_str = _build_context_str(context_chunks or [])
+    all_imports = set()
+    for chunk in chunks:
+        all_imports.update(chunk.imports)
+    imports_str = "\n".join(all_imports) if all_imports else "(none)"
+
+    class_methods = "\n\n".join(chunk.body for chunk in chunks)
+
+    # ── Initial generation ───────────────────────────────────────────────
+    prompt = CLASS_GENERATION_PROMPT.format(
+        language=language,
+        test_framework=test_framework,
+        class_name=class_name,
+        class_methods=class_methods,
+        context=context_str,
+        imports=imports_str,
+    )
+
+    result = GenerationResult()
+    raw_code = call_llm(prompt)
+    code = _strip_markdown_fences(raw_code)
+    result.attempts = 1
+
+    validation = validate_test_code(code, language, test_framework)
+
+    if validation.is_valid:
+        result.code = code
+        result.is_valid = True
+        return result
+
+    # ── Self-correction loop ─────────────────────────────────────────────
+    for retry in range(max_retries):
+        logger.info(
+            "Validation failed for class %s (attempt %d), retrying... Issues: %s",
+            class_name,
+            result.attempts,
+            validation.issues,
+        )
+
+        correction_prompt = CLASS_SELF_CORRECTION_PROMPT.format(
+            language=language,
+            test_framework=test_framework,
+            class_name=class_name,
+            original_tests=code,
+            issues="\n".join(f"- {issue}" for issue in validation.issues),
+        )
+
+        raw_code = call_llm(correction_prompt)
+        code = _strip_markdown_fences(raw_code)
+        result.attempts += 1
+
+        validation = validate_test_code(code, language, test_framework)
+
+        if validation.is_valid:
+            result.code = code
+            result.is_valid = True
+            return result
+
+    # Max retries exhausted
+    result.code = code
+    result.is_valid = False
+    result.issues = validation.issues
+    return result
+
+
+def generate_functions_tests(
+    file_name: str,
+    chunks: list[FunctionChunk],
+    context_chunks: list[RetrievalResult] | None = None,
+    config: TestIQConfig | None = None,
+    *,
+    llm_fn: Callable[[str], str] | None = None,
+) -> GenerationResult:
+    """
+    Generate test code for a list of standalone functions using LLM + self-correction.
+    """
+    if not chunks:
+        return GenerationResult()
+
+    cfg = config or load_config()
+    call_llm = llm_fn or _default_llm_fn(cfg)
+    language = chunks[0].language or cfg.parser.language
+    test_framework = cfg.get_test_framework(language)
+    max_retries = cfg.generation.max_retries
+
+    context_str = _build_context_str(context_chunks or [])
+    all_imports = set()
+    for chunk in chunks:
+        all_imports.update(chunk.imports)
+    imports_str = "\n".join(all_imports) if all_imports else "(none)"
+
+    functions_body = "\n\n".join(chunk.body for chunk in chunks)
+
+    # ── Initial generation ───────────────────────────────────────────────
+    prompt = FUNCTIONS_GENERATION_PROMPT.format(
+        language=language,
+        test_framework=test_framework,
+        file_name=file_name,
+        functions_body=functions_body,
+        context=context_str,
+        imports=imports_str,
+    )
+
+    result = GenerationResult()
+    raw_code = call_llm(prompt)
+    code = _strip_markdown_fences(raw_code)
+    result.attempts = 1
+
+    validation = validate_test_code(code, language, test_framework)
+
+    if validation.is_valid:
+        result.code = code
+        result.is_valid = True
+        return result
+
+    # ── Self-correction loop ─────────────────────────────────────────────
+    for retry in range(max_retries):
+        logger.info(
+            "Validation failed for functions in %s (attempt %d), retrying... Issues: %s",
+            file_name,
+            result.attempts,
+            validation.issues,
+        )
+
+        correction_prompt = FUNCTIONS_SELF_CORRECTION_PROMPT.format(
+            language=language,
+            test_framework=test_framework,
+            file_name=file_name,
+            original_tests=code,
+            issues="\n".join(f"- {issue}" for issue in validation.issues),
+        )
+
+        raw_code = call_llm(correction_prompt)
+        code = _strip_markdown_fences(raw_code)
+        result.attempts += 1
+
+        validation = validate_test_code(code, language, test_framework)
+
+        if validation.is_valid:
+            result.code = code
+            result.is_valid = True
+            return result
+
+    # Max retries exhausted
     result.code = code
     result.is_valid = False
     result.issues = validation.issues
