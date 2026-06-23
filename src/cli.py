@@ -29,7 +29,31 @@ from src.workflows.generate import generate_tests
 from src.workflows.explain import explain_failure
 from src.workflows.scan import scan_coverage
 
-app = typer.Typer(
+class TestIQTyper(typer.Typer):
+    def __call__(self, *args, **kwargs):
+        import sys
+        from pathlib import Path
+        
+        SUBCOMMANDS = {"index", "generate", "explain", "scan", "version", "show", "run", "assume"}
+        cli_args = sys.argv[1:]
+        
+        if cli_args:
+            first_arg = cli_args[0]
+            if not first_arg.startswith("-") and first_arg not in SUBCOMMANDS:
+                path_obj = Path(first_arg).resolve()
+                if path_obj.is_dir():
+                    cfg = _load_config_or_exit()
+                    confirm = typer.confirm(
+                        f"Do you want to index all the files in '{first_arg}' for generating test cases?",
+                        default=True
+                    )
+                    if confirm:
+                        _run_indexing(path_obj, cfg)
+                    return
+        
+        return super().__call__(*args, **kwargs)
+
+app = TestIQTyper(
     name="testiq",
     help="Local AI-powered test generation and explanation tool. "
          "Runs 100% locally via Ollama — no cloud, no paid APIs.",

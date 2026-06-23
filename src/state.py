@@ -55,15 +55,17 @@ def register_directory(cleaned_name: str, original_path: str, file_count: int, c
 def get_directory_path(cleaned_name: str) -> str | None:
     """Get the original path of a cleaned directory name if it is indexed."""
     dirs = load_state()
-    info = dirs.get(cleaned_name)
-    if info:
-        return info.get("path")
+    lower_name = cleaned_name.lower()
+    for k, info in dirs.items():
+        if k.lower() == lower_name:
+            return info.get("path")
     return None
 
 def is_directory_indexed(cleaned_name: str) -> bool:
     """Check if a directory name (cleaned with underscores) is indexed."""
     dirs = load_state()
-    return cleaned_name in dirs
+    lower_name = cleaned_name.lower()
+    return any(k.lower() == lower_name for k in dirs)
 
 def get_all_directories() -> dict[str, dict]:
     """Return all indexed directories."""
