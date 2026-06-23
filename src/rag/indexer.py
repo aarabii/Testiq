@@ -23,7 +23,9 @@ from langchain_ollama import OllamaEmbeddings
 from src.config import TestIQConfig, load_config
 from src.parser.base_parser import FunctionChunk
 from src.parser.language_registry import EXTENSION_MAP, registry
+from rich.console import Console
 
+console = Console()
 logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = "testiq_functions"
@@ -97,10 +99,17 @@ class Indexer:
                 continue
 
             try:
+                rel_path = file_path.relative_to(dir_path)
+                console.print(f"  • [blue]Processing:[/] {rel_path} ...", end="")
                 count = self.index_file(str(file_path))
+                if count > 0:
+                    console.print(f" [green]indexed {count} functions[/]")
+                else:
+                    console.print(" [dim]no functions found[/]")
                 result.files_processed += 1
                 result.chunks_indexed += count
             except Exception as exc:
+                console.print(" [bold red]failed[/]")
                 msg = f"Error indexing {file_path}: {exc}"
                 logger.warning(msg)
                 result.errors.append(msg)

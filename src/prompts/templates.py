@@ -181,3 +181,40 @@ first, based on risk and importance. Keep your response concise — bullet \
 points preferred.
 """,
 )
+
+
+# ── Run Instructions ──────────────────────────────────────────────────────────
+
+RUN_INSTRUCTION_PROMPT = PromptTemplate(
+    input_variables=["language", "test_framework", "test_files"],
+    template="""\
+You are a devops and testing engineer. A user has generated unit tests for a {language} codebase using {test_framework}.
+The generated test files are:
+{test_files}
+
+Provide clear, step-by-step instructions on how the user can run these tests in their terminal.
+Include the exact commands and any necessary setup steps.
+Keep it concise and output using clean markdown format.
+""",
+)
+
+
+# ── Assume Analyzer ───────────────────────────────────────────────────────────
+
+ASSUME_PROMPT = PromptTemplate(
+    input_variables=["file_or_dir", "code_structure"],
+    template="""\
+You are a senior QA engineer and testing analyst.
+Analyze the following code structure and contents of {file_or_dir}:
+
+{code_structure}
+
+Predict the test scenarios and outcomes:
+1. What will happen if it's going to pass (Happy Path scenario)?
+2. What will happen if it's going to fail (e.g., typical bugs, bad input)?
+3. Identify exactly where it is most likely to fail (Critical Failure Points).
+4. What are the key edge cases we must verify?
+
+Produce a visually understandable, structured markdown report with clear headings and bullet points.
+""",
+)

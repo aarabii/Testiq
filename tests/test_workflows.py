@@ -488,3 +488,40 @@ class TestScanWorkflow:
         config = TestIQConfig(scan=ScanConfig(risk_threshold=100))
         result = scan_coverage(str(src_dir), config)
         assert result.untested == []
+
+
+# ── State manager tests ──────────────────────────────────────────────────────
+
+class TestState:
+    def test_state_load_save(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        from src import state
+        from src.config import TestIQConfig, RAGConfig
+        fake_cfg = TestIQConfig(rag=RAGConfig(db_path=str(tmp_path / ".testiq" / "db")))
+        monkeypatch.setattr("src.state.load_config", lambda: fake_cfg)
+
+        assert state.get_all_directories() == {}
+        state.register_directory("my_app", str(tmp_path / "my_app"), 10, 50)
+        
+        assert state.is_directory_indexed("my_app") is True
+        assert state.is_directory_indexed("non_existent") is False
+        assert state.get_directory_path("my_app") == str((tmp_path / "my_app").resolve())
+        
+        all_dirs = state.get_all_directories()
+        assert "my_app" in all_dirs
+        assert all_dirs["my_app"]["file_count"] == 10
+        assert all_dirs["my_app"]["chunk_count"] == 50
+
+
+# ── Assume workflow tests ────────────────────────────────────────────────────
+
+class TestAssumeWorkflow:
+    def test_assume_workflow(self, tmp_path: Path):
+        from src.workflows.assume import run_assume
+        
+        src_file = tmp_path / "calc.py"
+        src_file.write_text("def add(a, b): return a + b\n", encoding="utf-8")
+        
+        fake_llm = lambda prompt: "This is a predicted report."
+        
+        report = run_assume(src_file, llm_fn=fake_llm)
+        assert report == "This is a predicted report."
