@@ -28,14 +28,14 @@ else:
 
 class LLMConfig(BaseModel):
     provider: str = "ollama"
-    model: str = "deepseek-coder:1.3b"
+    model: str = "gemma4:e2b"
     base_url: str = "http://localhost:11434"
     temperature: float = 0.2
     max_tokens: int = 2048
 
 
 class EmbeddingsConfig(BaseModel):
-    model: str = "nomic-embed-text"
+    model: str = "mxbai-embed-large"
     base_url: str = "http://localhost:11434"
 
 

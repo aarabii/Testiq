@@ -4,6 +4,7 @@
 # User config
 testiq.config.toml
 .testiq/
+GENERATED_TEST_CASES/
 
 # Python
 __pycache__/
