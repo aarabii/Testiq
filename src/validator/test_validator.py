@@ -144,14 +144,22 @@ def validate_test_code(
 
     # Check imports (skip if framework has no import requirements)
     if rules["import_patterns"]:
-        has_import = any(
-            re.search(pat, code) for pat in rules["import_patterns"]
-        )
-        if not has_import:
-            result.add_issue(
-                f"Missing {test_framework} import. Expected one of: "
-                f"{', '.join(rules['import_patterns'])}"
+        needs_import = True
+        if test_framework.lower() == "pytest":
+            # Check if pytest is used in code outside of its import statement
+            clean_code = re.sub(r"\b(?:import\s+pytest|from\s+pytest)\b", "", code)
+            if "pytest" not in clean_code:
+                needs_import = False
+
+        if needs_import:
+            has_import = any(
+                re.search(pat, code) for pat in rules["import_patterns"]
             )
+            if not has_import:
+                result.add_issue(
+                    f"Missing {test_framework} import. Expected one of: "
+                    f"{', '.join(rules['import_patterns'])}"
+                )
 
     # Check assertions
     has_assertion = any(

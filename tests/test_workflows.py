@@ -45,7 +45,8 @@ INVALID_PYTEST_CODE_NO_IMPORT = textwrap.dedent("""\
     from mymodule import add
 
     def test_add_positive():
-        assert add(2, 3) == 5
+        with pytest.raises(ZeroDivisionError):
+            add(2, 3)
 """)
 
 
