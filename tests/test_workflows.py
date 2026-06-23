@@ -316,6 +316,36 @@ class TestGenerateWorkflow:
         assert result.is_valid is True
         assert "```" not in result.code
 
+    def test_generate_class_tests(self):
+        from src.workflows.generate import generate_class_tests
+
+        fake_llm = make_fake_llm([VALID_PYTEST_CODE])
+        result = generate_class_tests(
+            class_name="Calculator",
+            chunks=[self._make_chunk()],
+            config=self._make_config(),
+            llm_fn=fake_llm,
+        )
+
+        assert result.is_valid is True
+        assert result.attempts == 1
+        assert "assert" in result.code
+
+    def test_generate_functions_tests(self):
+        from src.workflows.generate import generate_functions_tests
+
+        fake_llm = make_fake_llm([VALID_PYTEST_CODE])
+        result = generate_functions_tests(
+            file_name="utils.py",
+            chunks=[self._make_chunk()],
+            config=self._make_config(),
+            llm_fn=fake_llm,
+        )
+
+        assert result.is_valid is True
+        assert result.attempts == 1
+        assert "assert" in result.code
+
 
 # ── Explain workflow tests ───────────────────────────────────────────────────
 

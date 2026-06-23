@@ -25,7 +25,11 @@ from src.config import TestIQConfig, load_config
 from src.parser.language_registry import registry
 from src.rag.indexer import Indexer
 from src.rag.retriever import Retriever
-from src.workflows.generate import generate_tests
+from src.workflows.generate import (
+    generate_tests,
+    generate_class_tests,
+    generate_functions_tests,
+)
 from src.workflows.explain import explain_failure
 from src.workflows.scan import scan_coverage
 
@@ -294,7 +298,7 @@ def _generate_tests_for_file(
     function: Optional[str] = None,
     dry_run: bool = False,
 ) -> int:
-    """Helper to generate tests for a single file and write them to output_dir."""
+    """Helper to generate tests for a single file and write them to output_dir grouped by class/functionality."""
     try:
         parser = registry.get_parser_for_file(str(file_path))
     except ValueError as exc:
@@ -330,58 +334,111 @@ def _generate_tests_for_file(
     effective_dry_run = dry_run or cfg.generation.dry_run
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    total_generated = 0
-
+    # Group the chunks by class name
+    from collections import defaultdict
+    grouped_chunks = defaultdict(list)
     for chunk in chunks:
+        grouped_chunks[chunk.class_name].append(chunk)
+
+    total_generated = 0
+    lang = chunks[0].language or cfg.parser.language
+    ext = ".py"
+    if lang in ("javascript", "typescript"):
+        ext = ".test.js" if lang == "javascript" else ".test.ts"
+    elif lang == "java":
+        ext = "Test.java"
+    elif lang == "go":
+        ext = "_test.go"
+    elif lang == "rust":
+        ext = "_test.rs"
+
+    def snake_case(s: str) -> str:
+        import re
+        return re.sub(r'(?<!^)(?=[A-Z])', '_', s).lower()
+
+    for class_name, group_chunks in grouped_chunks.items():
+        # Retrieve and deduplicate context
         context_chunks = []
         if retriever:
+            for chk in group_chunks:
+                try:
+                    context_chunks.extend(retriever.query_chunk(chk))
+                except Exception:
+                    pass
+            # Deduplicate context chunks by content
+            seen_content = set()
+            deduped_context = []
+            for ctx in context_chunks:
+                if ctx.content not in seen_content:
+                    seen_content.add(ctx.content)
+                    deduped_context.append(ctx)
+            context_chunks = deduped_context
+
+        if class_name is not None:
+            # Generate tests for a Class
+            if lang == "java":
+                test_filename = f"{class_name}Test.java"
+            elif lang == "go":
+                test_filename = f"{snake_case(class_name)}_test.go"
+            elif lang == "rust":
+                test_filename = f"{snake_case(class_name)}_test.rs"
+            elif lang in ("javascript", "typescript"):
+                test_filename = f"{snake_case(class_name)}{ext}"
+            else:
+                test_filename = f"test_{snake_case(class_name)}{ext}"
+
+            console.print(f"  • Generating tests for class [cyan]{class_name}[/]…")
             try:
-                context_chunks = retriever.query_chunk(chunk)
-            except Exception:
-                pass
+                with console.status("[bold green]Thinking…[/]", spinner="dots") if cfg.logging.show_spinner else _noop_context():
+                    result = generate_class_tests(class_name, group_chunks, context_chunks, cfg)
+            except Exception as exc:
+                console.print(f"    [red]Failed: {exc}[/]")
+                continue
+        else:
+            # Generate tests for Standalone Functions
+            if len(grouped_chunks) == 1:
+                # Only standalone functions exist in this file
+                if lang == "java":
+                    test_filename = f"{file_path.stem.capitalize()}Test.java"
+                elif lang == "go":
+                    test_filename = f"{file_path.stem}_test.go"
+                elif lang == "rust":
+                    test_filename = f"{file_path.stem}_test.rs"
+                else:
+                    test_filename = f"test_{file_path.stem}{ext}"
+            else:
+                # Mix of classes and standalone functions
+                if lang == "java":
+                    test_filename = f"{file_path.stem.capitalize()}FunctionsTest.java"
+                elif lang == "go":
+                    test_filename = f"{file_path.stem}_functions_test.go"
+                elif lang == "rust":
+                    test_filename = f"{file_path.stem}_functions_test.rs"
+                elif lang in ("javascript", "typescript"):
+                    test_filename = f"{file_path.stem}_functions{ext}"
+                else:
+                    test_filename = f"test_{file_path.stem}_functions{ext}"
 
-        console.print(f"  • Generating tests for [cyan]{chunk.name}()[/]…")
-
-        try:
-            with console.status("[bold green]Thinking…[/]", spinner="dots") if cfg.logging.show_spinner else _noop_context():
-                result = generate_tests(chunk, context_chunks, cfg)
-        except Exception as exc:
-            console.print(f"    [red]Failed: {exc}[/]")
-            continue
+            console.print(f"  • Generating tests for standalone functions in [cyan]{file_path.name}[/]…")
+            try:
+                with console.status("[bold green]Thinking…[/]", spinner="dots") if cfg.logging.show_spinner else _noop_context():
+                    result = generate_functions_tests(file_path.name, group_chunks, context_chunks, cfg)
+            except Exception as exc:
+                console.print(f"    [red]Failed: {exc}[/]")
+                continue
 
         if not result.code:
             console.print(f"    [yellow]No code generated after {result.attempts} attempt(s).[/]")
             continue
 
         if effective_dry_run:
-            console.print(f"\n[dim]── dry-run output for {chunk.name}() ──[/]\n")
+            name_label = f"class {class_name}" if class_name is not None else f"functions in {file_path.name}"
+            console.print(f"\n[dim]── dry-run output for {name_label} ──[/]\n")
             console.print(result.code)
             console.print(f"\n[dim]── end ({result.attempts} attempt(s)) ──[/]")
         else:
-            lang = chunk.language or cfg.parser.language
-            ext = ".py"
-            if lang in ("javascript", "typescript"):
-                ext = ".test.js" if lang == "javascript" else ".test.ts"
-            elif lang == "java":
-                ext = "Test.java"
-            elif lang == "go":
-                ext = "_test.go"
-            elif lang == "rust":
-                ext = "_test.rs"
-                
-            test_filename = f"test_{file_path.stem}{ext}"
-            if lang == "java":
-                test_filename = f"{file_path.stem.capitalize()}Test.java"
-            elif lang == "go":
-                test_filename = f"{file_path.stem}_test.go"
-            elif lang == "rust":
-                test_filename = f"{file_path.stem}_test.rs"
-
             test_path = output_dir / test_filename
-            mode = "a" if test_path.exists() and total_generated > 0 else "w"
-            with open(test_path, mode, encoding="utf-8") as f:
-                if mode == "a":
-                    f.write("\n\n")
+            with open(test_path, "w", encoding="utf-8") as f:
                 f.write(result.code)
 
             console.print(
@@ -392,7 +449,7 @@ def _generate_tests_for_file(
         if not result.is_valid:
             console.print(f"    [yellow]⚠ Validation issues: {', '.join(result.issues)}[/]")
 
-        total_generated += 1
+        total_generated += len(group_chunks)
 
     return total_generated
 
@@ -450,7 +507,13 @@ def generate(
     sub_path = parts[1] if len(parts) > 1 else None
 
     # Check if the directory name is indexed
-    from src.state import get_directory_path, is_directory_indexed
+    from src.state import get_all_directories, get_directory_path, is_directory_indexed
+    dirs = get_all_directories()
+    for k in dirs:
+        if k.lower() == dir_name.lower():
+            dir_name = k
+            break
+
     if not is_directory_indexed(dir_name):
         console.print(f"[bold red]Error:[/] Directory '{dir_name}' has not been indexed yet.")
         confirm = typer.confirm("Would you like to index a directory now?", default=True)
@@ -724,7 +787,12 @@ def assume(
     if target_path.exists():
         resolved_path = target_path
     else:
-        from src.state import get_directory_path, is_directory_indexed
+        from src.state import get_all_directories, get_directory_path, is_directory_indexed
+        dirs = get_all_directories()
+        for k in dirs:
+            if k.lower() == dir_name.lower():
+                dir_name = k
+                break
         if not is_directory_indexed(dir_name):
             console.print(f"[bold red]Error:[/] Directory '{dir_name}' has not been indexed yet.")
             raise typer.Exit(code=1)

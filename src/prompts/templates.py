@@ -51,6 +51,8 @@ Requirements:
 5. Use assertions appropriate for {test_framework}.
 6. Do NOT include any explanatory text — output ONLY valid {language} code.
 """,
+)
+
 # ── Class Test Generation ───────────────────────────────────────────────────
 
 CLASS_GENERATION_PROMPT = PromptTemplate(

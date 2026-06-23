@@ -84,9 +84,11 @@ class TestIndexCommand:
 class TestGenerateCommand:
     @patch("src.cli._check_ollama")
     @patch("src.cli.Retriever", side_effect=Exception("no db"))
+    @patch("src.cli.generate_functions_tests")
+    @patch("src.cli.generate_class_tests")
     @patch("src.cli.generate_tests")
     def test_generate_writes_file(
-        self, mock_gen, mock_retriever, mock_ollama, tmp_path
+        self, mock_gen, mock_gen_class, mock_gen_funcs, mock_retriever, mock_ollama, tmp_path
     ):
         from src.workflows.generate import GenerationResult
 
@@ -95,9 +97,12 @@ class TestGenerateCommand:
         tests_dir = tmp_path / "tests"
         tests_dir.mkdir()
 
-        mock_gen.return_value = GenerationResult(
+        gen_result = GenerationResult(
             code=VALID_TEST_CODE, is_valid=True, attempts=1
         )
+        mock_gen.return_value = gen_result
+        mock_gen_class.return_value = gen_result
+        mock_gen_funcs.return_value = gen_result
 
         with patch("src.cli.load_config") as mock_cfg:
             cfg = MagicMock()
@@ -115,18 +120,23 @@ class TestGenerateCommand:
 
     @patch("src.cli._check_ollama")
     @patch("src.cli.Retriever", side_effect=Exception("no db"))
+    @patch("src.cli.generate_functions_tests")
+    @patch("src.cli.generate_class_tests")
     @patch("src.cli.generate_tests")
     def test_generate_dry_run(
-        self, mock_gen, mock_retriever, mock_ollama, tmp_path
+        self, mock_gen, mock_gen_class, mock_gen_funcs, mock_retriever, mock_ollama, tmp_path
     ):
         from src.workflows.generate import GenerationResult
 
         src_file = tmp_path / "sample.py"
         src_file.write_text(SAMPLE_PY)
 
-        mock_gen.return_value = GenerationResult(
+        gen_result = GenerationResult(
             code=VALID_TEST_CODE, is_valid=True, attempts=1
         )
+        mock_gen.return_value = gen_result
+        mock_gen_class.return_value = gen_result
+        mock_gen_funcs.return_value = gen_result
 
         with patch("src.cli.load_config") as mock_cfg:
             cfg = MagicMock()
@@ -143,6 +153,63 @@ class TestGenerateCommand:
         assert "dry-run" in result.output
         # No test file should have been written
         assert not (tmp_path / "tests" / "test_sample.py").exists()
+
+    @patch("src.cli._check_ollama")
+    @patch("src.cli.Retriever", side_effect=Exception("no db"))
+    @patch("src.cli.generate_functions_tests")
+    @patch("src.cli.generate_class_tests")
+    @patch("src.cli.generate_tests")
+    def test_generate_writes_multiple_files_for_classes(
+        self, mock_gen, mock_gen_class, mock_gen_funcs, mock_retriever, mock_ollama, tmp_path
+    ):
+        from src.workflows.generate import GenerationResult
+
+        src_content = textwrap.dedent("""\
+            class Calculator:
+                def add(self, a, b):
+                    \"\"\"Add.\"\"\"
+                    return a + b
+                def sub(self, a, b):
+                    \"\"\"Sub.\"\"\"
+                    return a - b
+
+            def hello():
+                \"\"\"Hello.\"\"\"
+                return "hello"
+        """)
+        src_file = tmp_path / "sample_classes.py"
+        src_file.write_text(src_content, encoding="utf-8")
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir(exist_ok=True)
+
+        gen_result_class = GenerationResult(
+            code="class CalculatorTests", is_valid=True, attempts=1
+        )
+        gen_result_funcs = GenerationResult(
+            code="def test_hello()", is_valid=True, attempts=1
+        )
+        mock_gen_class.return_value = gen_result_class
+        mock_gen_funcs.return_value = gen_result_funcs
+
+        with patch("src.cli.load_config") as mock_cfg:
+            cfg = MagicMock()
+            cfg.logging.show_spinner = False
+            cfg.generation.dry_run = False
+            cfg.generation.output_dir = str(tests_dir)
+            cfg.parser.language = "python"
+            cfg.get_test_framework.return_value = "pytest"
+            mock_cfg.return_value = cfg
+
+            result = runner.invoke(app, ["generate", str(src_file)])
+
+        assert result.exit_code == 0
+        assert "Done!" in result.output
+
+        assert (tests_dir / "test_calculator.py").exists()
+        assert (tests_dir / "test_sample_classes_functions.py").exists()
+
+        assert (tests_dir / "test_calculator.py").read_text() == "class CalculatorTests"
+        assert (tests_dir / "test_sample_classes_functions.py").read_text() == "def test_hello()"
 
     def test_generate_missing_file(self):
         result = runner.invoke(app, ["generate", "/nonexistent/file.py"])
