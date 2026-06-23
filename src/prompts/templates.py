@@ -51,6 +51,147 @@ Requirements:
 5. Use assertions appropriate for {test_framework}.
 6. Do NOT include any explanatory text — output ONLY valid {language} code.
 """,
+# ── Class Test Generation ───────────────────────────────────────────────────
+
+CLASS_GENERATION_PROMPT = PromptTemplate(
+    input_variables=[
+        "language",
+        "test_framework",
+        "class_name",
+        "class_methods",
+        "context",
+        "imports",
+    ],
+    template="""\
+You are a senior {language} engineer specialising in writing thorough, \
+production-quality tests using {test_framework}.
+
+## Target Class under Test
+**Name:** `{class_name}`
+**Methods and Implementations:**
+```{language}
+{class_methods}
+```
+
+## File Imports
+```{language}
+{imports}
+```
+
+## Related Context (helper functions, classes, constants)
+{context}
+
+## Instructions
+Generate a complete {test_framework} test file for class `{class_name}`.
+
+Requirements:
+1. Import the class under test and any necessary dependencies.
+2. Include the correct {test_framework} imports and structure (such as test classes, setup/teardown if appropriate).
+3. Cover all methods: happy path, edge cases, boundary values, and error cases for each method.
+4. Each test should have a descriptive name explaining what it verifies.
+5. Use assertions appropriate for {test_framework}.
+6. Do NOT include any explanatory text — output ONLY valid {language} code.
+""",
+)
+
+CLASS_SELF_CORRECTION_PROMPT = PromptTemplate(
+    input_variables=[
+        "language",
+        "test_framework",
+        "class_name",
+        "original_tests",
+        "issues",
+    ],
+    template="""\
+You are a senior {language} engineer. The following {test_framework} tests \
+for class `{class_name}` have validation issues that must be fixed.
+
+## Original Tests
+```{language}
+{original_tests}
+```
+
+## Validation Issues Found
+{issues}
+
+## Instructions
+Fix ALL issues listed above. Output ONLY the corrected {language} test code — \
+no explanations, no markdown fences, just valid {language} code. Ensure:
+1. Correct {test_framework} imports are present.
+2. Every test contains at least one assertion.
+3. Test structure follows {test_framework} conventions.
+""",
+)
+
+# ── Standalone Functions Test Generation ──────────────────────────────────────
+
+FUNCTIONS_GENERATION_PROMPT = PromptTemplate(
+    input_variables=[
+        "language",
+        "test_framework",
+        "file_name",
+        "functions_body",
+        "context",
+        "imports",
+    ],
+    template="""\
+You are a senior {language} engineer specialising in writing thorough, \
+production-quality tests using {test_framework}.
+
+## Target Functions in `{file_name}`
+**Functions and Implementations:**
+```{language}
+{functions_body}
+```
+
+## File Imports
+```{language}
+{imports}
+```
+
+## Related Context (helper functions, classes, constants)
+{context}
+
+## Instructions
+Generate a complete {test_framework} test file for these functions.
+
+Requirements:
+1. Import the functions under test and any necessary dependencies.
+2. Include the correct {test_framework} imports and structure.
+3. Cover: happy path, edge cases, boundary values, and error cases.
+4. Each test should have a descriptive name explaining what it verifies.
+5. Use assertions appropriate for {test_framework}.
+6. Do NOT include any explanatory text — output ONLY valid {language} code.
+""",
+)
+
+FUNCTIONS_SELF_CORRECTION_PROMPT = PromptTemplate(
+    input_variables=[
+        "language",
+        "test_framework",
+        "file_name",
+        "original_tests",
+        "issues",
+    ],
+    template="""\
+You are a senior {language} engineer. The following {test_framework} tests \
+for functions in `{file_name}` have validation issues that must be fixed.
+
+## Original Tests
+```{language}
+{original_tests}
+```
+
+## Validation Issues Found
+{issues}
+
+## Instructions
+Fix ALL issues listed above. Output ONLY the corrected {language} test code — \
+no explanations, no markdown fences, just valid {language} code. Ensure:
+1. Correct {test_framework} imports are present.
+2. Every test contains at least one assertion.
+3. Test structure follows {test_framework} conventions.
+""",
 )
 
 
